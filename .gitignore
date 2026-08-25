@@ -1,0 +1,13 @@
+# Pre-existing project data, not part of the webtool codebase (root-level only;
+# test fixtures under tests/ are NOT covered by this pattern)
+/*.srt
+/data.csv
+/慈濟中英對照表.md
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# SDD scratch workspace
+.superpowers/
