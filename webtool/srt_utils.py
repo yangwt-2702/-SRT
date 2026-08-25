@@ -32,3 +32,11 @@ def serialize_srt(cues: list[Cue]) -> str:
         for cue in cues
     ]
     return "\n".join(blocks) + "\n"
+
+
+def split_batches(cues: list[Cue], batch_size: int) -> list[list[Cue]]:
+    return [cues[i:i + batch_size] for i in range(0, len(cues), batch_size)]
+
+
+def validate_indices(source_batch: list[Cue], returned_indices: list[int]) -> bool:
+    return [c.index for c in source_batch] == list(returned_indices)
