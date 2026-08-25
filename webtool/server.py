@@ -7,7 +7,7 @@ from webtool.drust_client import DrustClient
 from webtool.glossary_check import check_consistency
 from webtool.translator import (
     build_batch_prompt, build_retry_prompt, parse_claude_response,
-    call_claude, TranslationParseError, ClaudeCliError,
+    call_claude, TranslationParseError, ClaudeApiError,
 )
 
 app = Flask(__name__)
@@ -35,10 +35,11 @@ def translate_cues(cues: list[Cue], glossary: list[dict], batch_size: int,
 
         for attempt in range(max_retries):
             try:
-                raw = call_claude(prompt, config.CLAUDE_BIN, config.CLAUDE_TIMEOUT_SECONDS)
+                raw = call_claude(prompt, config.ANTHROPIC_API_KEY, config.ANTHROPIC_MODEL,
+                                   config.ANTHROPIC_TIMEOUT_SECONDS)
                 parsed = parse_claude_response(raw, expected_indices)
                 break
-            except (TranslationParseError, ClaudeCliError) as e:
+            except (TranslationParseError, ClaudeApiError) as e:
                 last_error = str(e)
                 prompt = build_retry_prompt(original_prompt, last_error)
 

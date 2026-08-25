@@ -1,7 +1,8 @@
 # webtool/translator.py
 from dataclasses import dataclass, field
 import re
-import subprocess
+
+import anthropic
 
 _UNSURE_RE = re.compile(r"\[\[UNSURE:(.*?)\|(.*?)\]\]")
 
@@ -79,26 +80,31 @@ def parse_claude_response(raw: str, expected_indices: list[int]) -> list[ParsedL
     return parsed
 
 
-class ClaudeCliError(Exception):
+class ClaudeApiError(Exception):
     pass
 
 
-def call_claude(prompt: str, claude_bin: str, timeout: int) -> str:
-    try:
-        result = subprocess.run(
-            [claude_bin, "-p", prompt, "--dangerously-skip-permissions"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as e:
-        raise ClaudeCliError(f"claude CLI 逾時（{timeout}秒）") from e
+_MAX_RESPONSE_TOKENS = 8192
 
-    if result.returncode != 0:
-        # claude CLI can print its actual explanation (e.g. a usage-limit
-        # notice) to stdout with an empty stderr -- surface both so the
-        # real reason isn't silently discarded.
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise ClaudeCliError(f"claude CLI 失敗（exit {result.returncode}）：{detail}")
-    return result.stdout
+
+def call_claude(prompt: str, api_key: str, model: str, timeout: int) -> str:
+    if not api_key:
+        raise ClaudeApiError("未設定 ANTHROPIC_API_KEY，請在 .env 檔案中設定後重新啟動伺服器")
+
+    client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
+    try:
+        response = client.messages.create(
+            model=model,
+            max_tokens=_MAX_RESPONSE_TOKENS,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except anthropic.AuthenticationError as e:
+        raise ClaudeApiError(f"Anthropic API 金鑰無效，請確認 .env 設定：{e}") from e
+    except anthropic.RateLimitError as e:
+        raise ClaudeApiError(f"Anthropic API 已達速率限制，請稍後再試：{e}") from e
+    except anthropic.APIStatusError as e:
+        raise ClaudeApiError(f"Anthropic API 錯誤（status {e.status_code}）：{e.message}") from e
+    except anthropic.APIConnectionError as e:
+        raise ClaudeApiError(f"無法連線 Anthropic API：{e}") from e
+
+    return "".join(block.text for block in response.content if block.type == "text")

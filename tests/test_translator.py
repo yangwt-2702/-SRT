@@ -83,52 +83,81 @@ def test_parse_claude_response_raises_on_malformed_line():
 
 
 from unittest.mock import patch, MagicMock
-from webtool.translator import call_claude, ClaudeCliError
+import anthropic
+import httpx2
+
+from webtool.translator import call_claude, ClaudeApiError
 
 
-@patch("webtool.translator.subprocess.run")
-def test_call_claude_returns_stdout_on_success(mock_run):
-    mock_run.return_value = MagicMock(returncode=0, stdout="1|||hello", stderr="")
-    result = call_claude("prompt text", claude_bin="claude.exe", timeout=60)
-    assert result == "1|||hello"
-    args = mock_run.call_args[0][0]
-    assert args[0] == "claude.exe"
-    assert "-p" in args
-    assert "prompt text" in args
+def _fake_response(status_code, message):
+    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+    return httpx2.Response(status_code, request=request, json={"error": {"message": message}})
 
 
-@patch("webtool.translator.subprocess.run")
-def test_call_claude_raises_on_nonzero_exit(mock_run):
-    mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="boom")
-    try:
-        call_claude("prompt text", claude_bin="claude.exe", timeout=60)
-        assert False, "expected ClaudeCliError"
-    except ClaudeCliError as e:
-        assert "boom" in str(e)
-
-
-@patch("webtool.translator.subprocess.run")
-def test_call_claude_error_includes_stdout_when_stderr_is_empty(mock_run):
-    # Observed live: claude CLI can exit 1 with an explanatory message on
-    # stdout (e.g. a usage-limit notice) and an empty stderr. The old
-    # error message only included stderr, silently discarding the one
-    # piece of text that actually explained the failure.
-    mock_run.return_value = MagicMock(
-        returncode=1, stdout="Claude usage limit reached for this session.", stderr=""
+@patch("webtool.translator.anthropic.Anthropic")
+def test_call_claude_returns_joined_text_blocks_on_success(mock_anthropic_cls):
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = MagicMock(
+        content=[MagicMock(type="text", text="1|||hello"), MagicMock(type="text", text=" world")]
     )
-    try:
-        call_claude("prompt text", claude_bin="claude.exe", timeout=60)
-        assert False, "expected ClaudeCliError"
-    except ClaudeCliError as e:
-        assert "usage limit reached" in str(e)
+    mock_anthropic_cls.return_value = mock_client
+
+    result = call_claude("prompt text", api_key="sk-test", model="claude-sonnet-5", timeout=60)
+
+    assert result == "1|||hello world"
+    mock_anthropic_cls.assert_called_once_with(api_key="sk-test", timeout=60)
+    _, kwargs = mock_client.messages.create.call_args
+    assert kwargs["model"] == "claude-sonnet-5"
+    assert kwargs["messages"] == [{"role": "user", "content": "prompt text"}]
 
 
-@patch("webtool.translator.subprocess.run")
-def test_call_claude_raises_on_timeout(mock_run):
-    import subprocess
-    mock_run.side_effect = subprocess.TimeoutExpired(cmd="claude", timeout=60)
+def test_call_claude_raises_immediately_when_api_key_missing():
     try:
-        call_claude("prompt text", claude_bin="claude.exe", timeout=60)
-        assert False, "expected ClaudeCliError"
-    except ClaudeCliError:
-        pass
+        call_claude("prompt text", api_key="", model="claude-sonnet-5", timeout=60)
+        assert False, "expected ClaudeApiError"
+    except ClaudeApiError as e:
+        assert "ANTHROPIC_API_KEY" in str(e)
+
+
+@patch("webtool.translator.anthropic.Anthropic")
+def test_call_claude_raises_on_authentication_error(mock_anthropic_cls):
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = anthropic.AuthenticationError(
+        "invalid x-api-key", response=_fake_response(401, "invalid x-api-key"), body=None
+    )
+    mock_anthropic_cls.return_value = mock_client
+
+    try:
+        call_claude("prompt text", api_key="sk-bad", model="claude-sonnet-5", timeout=60)
+        assert False, "expected ClaudeApiError"
+    except ClaudeApiError as e:
+        assert "金鑰無效" in str(e)
+
+
+@patch("webtool.translator.anthropic.Anthropic")
+def test_call_claude_raises_on_rate_limit_error(mock_anthropic_cls):
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = anthropic.RateLimitError(
+        "rate limited", response=_fake_response(429, "rate limited"), body=None
+    )
+    mock_anthropic_cls.return_value = mock_client
+
+    try:
+        call_claude("prompt text", api_key="sk-test", model="claude-sonnet-5", timeout=60)
+        assert False, "expected ClaudeApiError"
+    except ClaudeApiError as e:
+        assert "速率限制" in str(e)
+
+
+@patch("webtool.translator.anthropic.Anthropic")
+def test_call_claude_raises_on_connection_error(mock_anthropic_cls):
+    mock_client = MagicMock()
+    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+    mock_client.messages.create.side_effect = anthropic.APIConnectionError(request=request)
+    mock_anthropic_cls.return_value = mock_client
+
+    try:
+        call_claude("prompt text", api_key="sk-test", model="claude-sonnet-5", timeout=60)
+        assert False, "expected ClaudeApiError"
+    except ClaudeApiError as e:
+        assert "無法連線" in str(e)
