@@ -1,4 +1,13 @@
+import time
+
 import requests
+
+# Observed live: Python's `requests` occasionally hits a transient
+# connection failure against the Drust host even when curl succeeds
+# immediately after (same machine, same network). A single blip shouldn't
+# fail a 30-50 minute translation request outright.
+_MAX_ATTEMPTS = 3
+_RETRY_BACKOFF_SECONDS = 1
 
 
 class DrustClient:
@@ -11,17 +20,27 @@ class DrustClient:
     def _tenant_path(self, path: str) -> str:
         return f"{self.base_url}/t/{self.tenant_id}/{path}"
 
+    def _post_with_retry(self, url: str, json_body: dict, headers: dict) -> requests.Response:
+        last_error = None
+        for attempt in range(_MAX_ATTEMPTS):
+            try:
+                return requests.post(url, json=json_body, headers=headers, timeout=30)
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                last_error = e
+                if attempt < _MAX_ATTEMPTS - 1:
+                    time.sleep(_RETRY_BACKOFF_SECONDS)
+        raise last_error
+
     def fetch_glossary(self) -> list[dict]:
         rows = []
         page = 1
         per_page = 200
         total = None
         while True:
-            resp = requests.post(
+            resp = self._post_with_retry(
                 self._tenant_path("collections/translation_glossary/list"),
-                json={"page": page, "per_page": per_page},
-                headers={"Authorization": f"Bearer {self.anon_token}"},
-                timeout=30,
+                {"page": page, "per_page": per_page},
+                {"Authorization": f"Bearer {self.anon_token}"},
             )
             resp.raise_for_status()
             data = resp.json()
@@ -38,9 +57,9 @@ class DrustClient:
 
     def insert_pending_term(self, term: str, stage: str, context: str,
                              suggested_fix: str, video_title: str) -> dict:
-        resp = requests.post(
+        resp = self._post_with_retry(
             self._tenant_path("records/pending_terms"),
-            json={
+            {
                 "data": {
                     "term": term,
                     "stage": stage,
@@ -49,8 +68,7 @@ class DrustClient:
                     "video_title": video_title,
                 },
             },
-            headers={"Authorization": f"Bearer {self.service_token}"},
-            timeout=30,
+            {"Authorization": f"Bearer {self.service_token}"},
         )
         resp.raise_for_status()
         data = resp.json()

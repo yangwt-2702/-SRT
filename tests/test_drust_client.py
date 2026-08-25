@@ -1,3 +1,4 @@
+import requests
 import responses
 from webtool.drust_client import DrustClient
 
@@ -55,6 +56,47 @@ def test_fetch_glossary_stops_once_total_reached_even_if_api_repeats_same_page()
     rows = client.fetch_glossary()
     # Terminates once len(rows) >= total (250), i.e. after 3 identical 100-row pages.
     assert len(rows) == 300
+    assert len(responses.calls) == 3
+
+
+@responses.activate
+def test_fetch_glossary_retries_once_on_transient_connection_error():
+    # Observed live: Python's requests occasionally hits a transient
+    # connection failure against this host even when curl succeeds
+    # immediately after. A single blip shouldn't fail a 30-50 minute
+    # translation request outright.
+    responses.add(
+        responses.POST,
+        f"{BASE}/t/{TID}/collections/translation_glossary/list",
+        body=requests.exceptions.ConnectionError("transient blip"),
+    )
+    responses.add(
+        responses.POST,
+        f"{BASE}/t/{TID}/collections/translation_glossary/list",
+        json={"records": [{"chinese": "上人", "english": "Dharma Master", "locked": 1}],
+              "total": 1, "page": 1, "perPage": 200},
+        status=200,
+    )
+    client = DrustClient(BASE, TID, "anon-tok", "service-tok")
+    rows = client.fetch_glossary()
+    assert len(rows) == 1
+    assert len(responses.calls) == 2
+
+
+@responses.activate
+def test_fetch_glossary_raises_after_exhausting_retries():
+    for _ in range(3):
+        responses.add(
+            responses.POST,
+            f"{BASE}/t/{TID}/collections/translation_glossary/list",
+            body=requests.exceptions.ConnectionError("still down"),
+        )
+    client = DrustClient(BASE, TID, "anon-tok", "service-tok")
+    try:
+        client.fetch_glossary()
+        assert False, "expected ConnectionError to propagate"
+    except requests.exceptions.ConnectionError:
+        pass
     assert len(responses.calls) == 3
 
 
