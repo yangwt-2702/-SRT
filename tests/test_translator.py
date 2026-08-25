@@ -108,6 +108,22 @@ def test_call_claude_raises_on_nonzero_exit(mock_run):
 
 
 @patch("webtool.translator.subprocess.run")
+def test_call_claude_error_includes_stdout_when_stderr_is_empty(mock_run):
+    # Observed live: claude CLI can exit 1 with an explanatory message on
+    # stdout (e.g. a usage-limit notice) and an empty stderr. The old
+    # error message only included stderr, silently discarding the one
+    # piece of text that actually explained the failure.
+    mock_run.return_value = MagicMock(
+        returncode=1, stdout="Claude usage limit reached for this session.", stderr=""
+    )
+    try:
+        call_claude("prompt text", claude_bin="claude.exe", timeout=60)
+        assert False, "expected ClaudeCliError"
+    except ClaudeCliError as e:
+        assert "usage limit reached" in str(e)
+
+
+@patch("webtool.translator.subprocess.run")
 def test_call_claude_raises_on_timeout(mock_run):
     import subprocess
     mock_run.side_effect = subprocess.TimeoutExpired(cmd="claude", timeout=60)

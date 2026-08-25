@@ -96,5 +96,9 @@ def call_claude(prompt: str, claude_bin: str, timeout: int) -> str:
         raise ClaudeCliError(f"claude CLI 逾時（{timeout}秒）") from e
 
     if result.returncode != 0:
-        raise ClaudeCliError(f"claude CLI 失敗（exit {result.returncode}）：{result.stderr}")
+        # claude CLI can print its actual explanation (e.g. a usage-limit
+        # notice) to stdout with an empty stderr -- surface both so the
+        # real reason isn't silently discarded.
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise ClaudeCliError(f"claude CLI 失敗（exit {result.returncode}）：{detail}")
     return result.stdout
