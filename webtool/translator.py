@@ -1,6 +1,7 @@
 # webtool/translator.py
 from dataclasses import dataclass, field
 import re
+import subprocess
 
 _UNSURE_RE = re.compile(r"\[\[UNSURE:(.*?)\|(.*?)\]\]")
 
@@ -70,3 +71,24 @@ def parse_claude_response(raw: str, expected_indices: list[int]) -> list[ParsedL
             f"序號不符，預期 {expected_indices}，實際 {actual_indices}"
         )
     return parsed
+
+
+class ClaudeCliError(Exception):
+    pass
+
+
+def call_claude(prompt: str, claude_bin: str, timeout: int) -> str:
+    try:
+        result = subprocess.run(
+            [claude_bin, "-p", prompt, "--dangerously-skip-permissions"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise ClaudeCliError(f"claude CLI 逾時（{timeout}秒）") from e
+
+    if result.returncode != 0:
+        raise ClaudeCliError(f"claude CLI 失敗（exit {result.returncode}）：{result.stderr}")
+    return result.stdout

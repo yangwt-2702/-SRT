@@ -54,3 +54,39 @@ def test_parse_claude_response_raises_on_malformed_line():
         assert False, "expected TranslationParseError"
     except TranslationParseError:
         pass
+
+
+from unittest.mock import patch, MagicMock
+from webtool.translator import call_claude, ClaudeCliError
+
+
+@patch("webtool.translator.subprocess.run")
+def test_call_claude_returns_stdout_on_success(mock_run):
+    mock_run.return_value = MagicMock(returncode=0, stdout="1|||hello", stderr="")
+    result = call_claude("prompt text", claude_bin="claude.exe", timeout=60)
+    assert result == "1|||hello"
+    args = mock_run.call_args[0][0]
+    assert args[0] == "claude.exe"
+    assert "-p" in args
+    assert "prompt text" in args
+
+
+@patch("webtool.translator.subprocess.run")
+def test_call_claude_raises_on_nonzero_exit(mock_run):
+    mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="boom")
+    try:
+        call_claude("prompt text", claude_bin="claude.exe", timeout=60)
+        assert False, "expected ClaudeCliError"
+    except ClaudeCliError as e:
+        assert "boom" in str(e)
+
+
+@patch("webtool.translator.subprocess.run")
+def test_call_claude_raises_on_timeout(mock_run):
+    import subprocess
+    mock_run.side_effect = subprocess.TimeoutExpired(cmd="claude", timeout=60)
+    try:
+        call_claude("prompt text", claude_bin="claude.exe", timeout=60)
+        assert False, "expected ClaudeCliError"
+    except ClaudeCliError:
+        pass
