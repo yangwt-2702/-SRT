@@ -11,6 +11,7 @@ from webtool.translator import (
 )
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 
 drust_client = DrustClient(
     config.DRUST_BASE, config.DRUST_TENANT_ID,
@@ -27,7 +28,8 @@ def translate_cues(cues: list[Cue], glossary: list[dict], batch_size: int,
 
     for batch in split_batches(cues, batch_size):
         expected_indices = [c.index for c in batch]
-        prompt = build_batch_prompt(batch, glossary, context_tail)
+        original_prompt = build_batch_prompt(batch, glossary, context_tail)
+        prompt = original_prompt
         parsed = None
         last_error = ""
 
@@ -38,7 +40,7 @@ def translate_cues(cues: list[Cue], glossary: list[dict], batch_size: int,
                 break
             except (TranslationParseError, ClaudeCliError) as e:
                 last_error = str(e)
-                prompt = build_retry_prompt(prompt, last_error)
+                prompt = build_retry_prompt(original_prompt, last_error)
 
         if parsed is None:
             for cue in batch:
@@ -72,6 +74,8 @@ def translate():
     cues = parse_srt(content)
     if not cues:
         return jsonify({"error": "無法解析 SRT 內容，請確認檔案格式"}), 400
+    if len(cues) != content.count("-->"):
+        return jsonify({"error": "無法解析 SRT 內容，部分字幕可能因格式問題被跳過，請檢查檔案格式"}), 400
 
     try:
         glossary = drust_client.fetch_glossary()
@@ -86,12 +90,15 @@ def translate():
     warnings.extend(check_consistency(cues, translated, glossary))
 
     zh_text_by_index = {c.index: c.text for c in cues}
+    glossary_terms = {row.get("chinese") for row in glossary if row.get("chinese")}
     seen_terms = set()
     pending_terms = []
     for zh_term, suggested_fix in pending_raw:
         if zh_term in seen_terms:
             continue
         seen_terms.add(zh_term)
+        if zh_term in glossary_terms:
+            continue
         try:
             drust_client.insert_pending_term(
                 term=zh_term, stage="translation",

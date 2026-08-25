@@ -10,9 +10,13 @@ def check_consistency(zh_cues: list[Cue], en_cues: list[Cue], glossary: list[dic
         en_cue = en_by_index.get(zh_cue.index)
         if en_cue is None:
             continue
+        if en_cue.text == "[翻譯失敗-請人工確認]":
+            continue
         for row in locked_terms:
-            chinese = row["chinese"]
-            english = row["english"]
+            chinese = row.get("chinese")
+            english = row.get("english", "")
+            if not chinese:
+                continue
             if chinese in zh_cue.text and english not in en_cue.text:
                 warnings.append(
                     f"第 {zh_cue.index} 條：原文含鎖定詞「{chinese}」，"

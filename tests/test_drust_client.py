@@ -36,6 +36,29 @@ def test_fetch_glossary_paginates_until_empty_page():
 
 
 @responses.activate
+def test_fetch_glossary_stops_once_total_reached_even_if_api_repeats_same_page():
+    # Simulates a buggy API that ignores the `page` param and keeps returning
+    # the same non-empty page forever. Without bounding by `total`, the old
+    # "stop on empty batch" check alone would loop forever.
+    same_page = {
+        "records": [{"chinese": "上人", "english": "Dharma Master", "locked": 1}] * 100,
+        "total": 250, "page": 1, "perPage": 100,
+    }
+    for _ in range(5):
+        responses.add(
+            responses.POST,
+            f"{BASE}/t/{TID}/collections/translation_glossary/list",
+            json=same_page,
+            status=200,
+        )
+    client = DrustClient(BASE, TID, "anon-tok", "service-tok")
+    rows = client.fetch_glossary()
+    # Terminates once len(rows) >= total (250), i.e. after 3 identical 100-row pages.
+    assert len(rows) == 300
+    assert len(responses.calls) == 3
+
+
+@responses.activate
 def test_insert_pending_term_uses_service_token_and_returns_row():
     responses.add(
         responses.POST,

@@ -20,11 +20,15 @@ class ParsedLine:
 def build_batch_prompt(batch, glossary: list[dict], context_tail: list[tuple[str, str]]) -> str:
     relevant = [
         row for row in glossary
-        if any(row["chinese"] in cue.text for cue in batch)
+        if row.get("chinese") and any(row.get("chinese") in cue.text for cue in batch)
     ]
-    glossary_lines = "\n".join(f"- {row['chinese']} -> {row['english']}" for row in relevant)
+    glossary_lines = "\n".join(
+        f"- {row.get('chinese')} -> {row.get('english', '')}" for row in relevant
+    )
     context_lines = "\n".join(f"（前情）{zh} -> {en}" for zh, en in context_tail)
-    cue_lines = "\n".join(f"{cue.index}|||{cue.text}" for cue in batch)
+    cue_lines = "\n".join(
+        "{}|||{}".format(cue.index, cue.text.replace("\n", " ")) for cue in batch
+    )
 
     return f"""你是慈濟法師開示字幕的中翻英譯者。規則：
 - 逐行 1:1 對應，輸出的行數、序號必須與輸入完全相同，不可合併或拆分。
@@ -63,6 +67,8 @@ def parse_claude_response(raw: str, expected_indices: list[int]) -> list[ParsedL
             raise TranslationParseError(f"序號無法解析：{line!r}")
         unsure_matches = _UNSURE_RE.findall(text)
         clean_text = _UNSURE_RE.sub(lambda m: m.group(2), text).strip()
+        if "[[UNSURE" in clean_text:
+            raise TranslationParseError(f"未正確格式化的 UNSURE 標記殘留於譯文：{line!r}")
         parsed.append(ParsedLine(index=index, text=clean_text, unsure=unsure_matches))
 
     actual_indices = [p.index for p in parsed]

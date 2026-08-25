@@ -15,6 +15,7 @@ class DrustClient:
         rows = []
         page = 1
         per_page = 200
+        total = None
         while True:
             resp = requests.post(
                 self._tenant_path("collections/translation_glossary/list"),
@@ -28,6 +29,10 @@ class DrustClient:
             if not batch:
                 break
             rows.extend(batch)
+            if total is None:
+                total = data.get("total")
+            if total is not None and len(rows) >= total:
+                break
             page += 1
         return rows
 
