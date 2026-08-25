@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>慈濟字幕中翻英工具</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <h1>中文字幕 → 英文字幕</h1>
+  <p>上傳已完成糾錯/格式化的中文 .srt，系統會依詞彙庫產出英文 .srt。</p>
+
+  <input type="file" id="fileInput" accept=".srt">
+  <button id="translateBtn">開始翻譯</button>
+
+  <div id="status"></div>
+  <div id="warnings"></div>
+  <div id="pendingTerms"></div>
+  <a id="downloadLink" style="display:none" download>下載英文字幕</a>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
