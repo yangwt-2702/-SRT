@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 import re
 
-import anthropic
+import requests
 
 _UNSURE_RE = re.compile(r"\[\[UNSURE:(.*?)\|(.*?)\]\]")
 
@@ -80,31 +80,37 @@ def parse_claude_response(raw: str, expected_indices: list[int]) -> list[ParsedL
     return parsed
 
 
-class ClaudeApiError(Exception):
+class LlmApiError(Exception):
     pass
 
 
 _MAX_RESPONSE_TOKENS = 8192
 
 
-def call_claude(prompt: str, api_key: str, model: str, timeout: int) -> str:
+def call_llm(prompt: str, base_url: str, api_key: str, model: str, timeout: int) -> str:
     if not api_key:
-        raise ClaudeApiError("未設定 ANTHROPIC_API_KEY，請在 .env 檔案中設定後重新啟動伺服器")
+        raise LlmApiError("未設定 LLM_PROXY_API_KEY，請在 .env 檔案中設定後重新啟動伺服器")
 
-    client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
     try:
-        response = client.messages.create(
-            model=model,
-            max_tokens=_MAX_RESPONSE_TOKENS,
-            messages=[{"role": "user", "content": prompt}],
+        response = requests.post(
+            f"{base_url.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": _MAX_RESPONSE_TOKENS,
+            },
+            timeout=timeout,
         )
-    except anthropic.AuthenticationError as e:
-        raise ClaudeApiError(f"Anthropic API 金鑰無效，請確認 .env 設定：{e}") from e
-    except anthropic.RateLimitError as e:
-        raise ClaudeApiError(f"Anthropic API 已達速率限制，請稍後再試：{e}") from e
-    except anthropic.APIStatusError as e:
-        raise ClaudeApiError(f"Anthropic API 錯誤（status {e.status_code}）：{e.message}") from e
-    except anthropic.APIConnectionError as e:
-        raise ClaudeApiError(f"無法連線 Anthropic API：{e}") from e
+    except requests.exceptions.RequestException as e:
+        raise LlmApiError(f"無法連線 LLM 代理伺服器：{e}") from e
 
-    return "".join(block.text for block in response.content if block.type == "text")
+    if response.status_code in (401, 403):
+        raise LlmApiError(f"LLM 代理 API 金鑰無效或無權限，請確認 .env 設定：{response.text}")
+    if response.status_code == 429:
+        raise LlmApiError(f"LLM 代理已達速率限制，請稍後再試：{response.text}")
+    if response.status_code >= 400:
+        raise LlmApiError(f"LLM 代理錯誤（status {response.status_code}）：{response.text}")
+
+    data = response.json()
+    return data["choices"][0]["message"]["content"]

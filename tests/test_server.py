@@ -12,7 +12,7 @@ def fake_glossary():
     return [{"chinese": "志工", "english": "volunteer", "locked": 1}]
 
 
-@patch("webtool.server.call_claude")
+@patch("webtool.server.call_llm")
 def test_translate_cues_happy_path_all_batches_succeed(mock_call):
     cues = parse_srt(FIXTURE.read_text(encoding="utf-8"))
     # one batch (12 cues < batch size), claude echoes back English text per index
@@ -25,7 +25,7 @@ def test_translate_cues_happy_path_all_batches_succeed(mock_call):
     assert pending == []
 
 
-@patch("webtool.server.call_claude")
+@patch("webtool.server.call_llm")
 def test_translate_cues_retries_then_succeeds(mock_call):
     cues = parse_srt(FIXTURE.read_text(encoding="utf-8"))
     good = "\n".join(f"{c.index}|||English {c.index}" for c in cues)
@@ -38,7 +38,7 @@ def test_translate_cues_retries_then_succeeds(mock_call):
     assert mock_call.call_count == 2
 
 
-@patch("webtool.server.call_claude")
+@patch("webtool.server.call_llm")
 def test_translate_cues_marks_batch_failed_after_max_retries(mock_call):
     cues = parse_srt(FIXTURE.read_text(encoding="utf-8"))
     mock_call.return_value = "garbled non-conforming output"
@@ -64,9 +64,9 @@ def test_post_translate_rejects_non_srt_file():
 
 
 @patch("webtool.server.DrustClient.fetch_glossary")
-@patch("webtool.server.call_claude")
+@patch("webtool.server.call_llm")
 def test_post_translate_rejects_srt_missing_blank_line_between_cues(mock_call, mock_fetch):
-    mock_call.side_effect = AssertionError("call_claude should not be invoked")
+    mock_call.side_effect = AssertionError("call_llm should not be invoked")
     mock_fetch.side_effect = AssertionError("fetch_glossary should not be invoked")
 
     # Missing blank line between cue 1 and cue 2 causes parse_srt to swallow
@@ -90,7 +90,7 @@ def test_post_translate_rejects_srt_missing_blank_line_between_cues(mock_call, m
 
 @patch("webtool.server.DrustClient.insert_pending_term")
 @patch("webtool.server.DrustClient.fetch_glossary")
-@patch("webtool.server.call_claude")
+@patch("webtool.server.call_llm")
 def test_post_translate_skips_pending_insert_for_already_known_glossary_term(
     mock_call, mock_fetch, mock_insert,
 ):
