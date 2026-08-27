@@ -84,8 +84,7 @@ Durable Object（每個翻譯工作一個實例，狀態存在 DO storage）
 | `src/glossaryCheck.ts` | `glossary_check.py` | 鎖定詞彙一致性檢查（原文含鎖定詞但譯文未含 → 警告） |
 | `src/drustClient.ts` | `drust_client.py` | `fetchGlossary`（分頁 `per_page=200`，連線錯誤重試 3 次、間隔 1 秒）、`insertPendingTerm`（service token） |
 | `src/jobDurableObject.ts` | `server.py: translate_cues` + `/translate` route | 上表「Durable Object」欄位所有步驟的狀態機、alarm 排程、重試迴圈（每批 `MAX_RETRIES=3`，失敗則整批標記為 `[翻譯失敗-請人工確認]` 並加入警告，語境清空） |
-| `functions/api/jobs/index.ts` | `server.py: translate()` 的前半（驗證上傳、建立工作） | `POST /api/jobs`：驗證 `.srt`、解析、cue 數與 `-->` 出現次數比對（同現有 malformed-SRT 檢查）、建立 DO、回傳 jobId |
-| `functions/api/jobs/[id].ts` | `server.py: translate()` 的回傳格式 | `GET /api/jobs/:id`：查詢 DO 狀態，回傳 `{status, progress, warnings?, pending_terms?, filename?, srt?}` |
+| `functions/_worker.ts`（+ `frontend/` 的 `[assets]` binding） | `server.py: translate()` 全部（驗證上傳、建立工作、回傳格式） | **實際部署已改為單一 plain Cloudflare Worker + 靜態檔案 binding，不是 Cloudflare Pages**（見下方「部署」一節的更新說明）。單一 `fetch(request, env)` handler 手動路由：`POST /api/jobs`（驗證 `.srt`、解析、cue 數與 `-->` 出現次數比對、建立 DO、回傳 jobId）與 `GET /api/jobs/:id`（查詢 DO 狀態，回傳 `{status, progress, warnings?, pending_terms?, filename?, srt?}`），其餘請求 fallback 到 `env.ASSETS.fetch(request)`。 |
 | `frontend/index.html` / `app.js` / `style.css` | `webtool/templates/index.html` / `static/*` | 沿用相同版面與文案，把「送出後等 response」改成「送出→拿 jobId→輪詢」 |
 
 **設定與密鑰**（`wrangler secret put`，絕不進 repo）：
@@ -131,16 +130,31 @@ Object 本機測試方案）逐一移植：
 另以 `wrangler pages dev` 本機起服務，手動跑一次真實的中文 SRT（含 Drust／
 LLM 代理皆為真實呼叫）作為上線前的一次性驗收。
 
-## 部署
+## 部署（2026-08-27 更新：實際部署方式與本節原始設計不同）
 
-`wrangler pages deploy`，單一 Cloudflare Pages 專案（前端靜態檔 + Pages
-Functions API + Durable Object binding）。網域可用 Cloudflare 預設的
-`*.pages.dev` 子網域，或掛機構自有網域（待定，非本次 MVP 必要項）。
+原始設計是單一 Cloudflare Pages 專案。**實際部署時發現 Cloudflare Pages
+不支援本專案需要的「自架 Durable Object」寫法**——`wrangler pages deploy`
+在設定驗證階段直接回報 `Configuration file for Pages projects does not
+support "migrations"`，改掉之後又要求 Durable Object binding 提供
+`script_name`（指向另一個「已經部署」的獨立 Worker），而不是像
+`wrangler pages dev` 本機測試時那樣允許 DO 類別跟路由邏輯同包在一起。
+
+改為部署成**一般 Cloudflare Worker + 靜態檔案 binding**（`wrangler deploy`，
+非 `wrangler pages deploy`）：`wrangler.toml` 用 `main = "functions/_worker.ts"`
+＋ `[assets] directory = "./frontend" binding = "ASSETS"`，DO 與路由邏輯維持
+同一個檔案、同一次部署，行為與本機測試時完全一致。原本因應 Pages Advanced
+Mode 檔名限制而建立的 `frontend/_worker.js` shim 已移除，不再需要。
+
+密鑰改用 `wrangler secret put`（而非 `wrangler pages secret put`）。已部署於
+`https://srt-translator.yangwt.workers.dev`，並以真實中文 SRT 對正式環境的
+LLM 代理與 Drust 完整跑過一次驗證成功。
 
 ## 待確認/後續事項
 
 - Drust `DRUST_ANON_TOKEN`／`DRUST_SERVICE_TOKEN` 的舊值（曾硬編碼於公開
-  GitHub repo 的 `webtool/config.py`）**尚待使用者於 Drust 後台重新產生**；
-  新 Cloudflare 版部署前，`wrangler secret put` 應使用重新產生後的新值。
+  GitHub repo 的 `webtool/config.py`）**已由使用者於 Drust 後台重新產生**，
+  新值已用於 `wrangler secret put`。
 - 是否需要幫既有公開 GitHub repo（`yangwt-2702/-SRT`）改為 private，本次
   尚未決定，維持公開。
+- 目前無登入機制，任何拿到網址的人都能使用；網址不要公開張貼。
+- 工作完成 24 小時後 Durable Object 會自動清理該工作的狀態，逾時需重新上傳。
