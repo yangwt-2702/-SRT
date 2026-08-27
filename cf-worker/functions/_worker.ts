@@ -24,10 +24,13 @@ async function handleCreateJob(request: Request, env: Env): Promise<Response> {
   const videoTitle = file.name.replace(/\.srt$/i, "");
   const id = env.JOB.newUniqueId();
   const stub = env.JOB.get(id);
-  await stub.fetch("https://job/start", {
+  const startResp = await stub.fetch("https://job/start", {
     method: "POST",
     body: JSON.stringify({ videoTitle, cues: result.cues }),
   });
+  if (!startResp.ok) {
+    return Response.json({ error: "無法建立翻譯工作，請稍後再試" }, { status: 502 });
+  }
 
   return Response.json({ jobId: id.toString() }, { status: 201 });
 }

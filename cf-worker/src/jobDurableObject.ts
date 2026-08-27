@@ -28,7 +28,6 @@ interface JobState {
   warnings: string[];
   pendingRaw: Array<[string, string]>;
   contextTail: Array<[string, string]>;
-  glossary: GlossaryRow[] | null;
   nextBatchIndex: number;
   errorMessage: string | null;
   finalResult: FinalResult | null;
@@ -68,7 +67,6 @@ export class JobDurableObject implements DurableObject {
         warnings: [],
         pendingRaw: [],
         contextTail: [],
-        glossary: null,
         nextBatchIndex: 0,
         errorMessage: null,
         finalResult: null,
@@ -107,9 +105,11 @@ export class JobDurableObject implements DurableObject {
       return;
     }
 
-    if (job.glossary === null) {
+    let glossary = await this.state.storage.get<GlossaryRow[]>("glossary");
+    if (glossary === undefined) {
       try {
-        job.glossary = await this.drustClient().fetchGlossary();
+        glossary = await this.drustClient().fetchGlossary();
+        await this.state.storage.put("glossary", glossary);
       } catch {
         job.status = "error";
         job.errorMessage = "無法連線詞彙庫，請稍後再試";
@@ -119,40 +119,48 @@ export class JobDurableObject implements DurableObject {
       }
     }
 
-    const batches = splitBatches(job.zhCues, BATCH_SIZE);
-    const batch = batches[job.nextBatchIndex];
+    try {
+      const batches = splitBatches(job.zhCues, BATCH_SIZE);
+      const batch = batches[job.nextBatchIndex];
 
-    const outcome = await runOneBatch({
-      batch,
-      glossary: job.glossary,
-      contextTail: job.contextTail,
-      maxRetries: MAX_RETRIES,
-      callLlm: (prompt) => callLlm(prompt, LLM_PROXY_BASE_URL, this.env.LLM_PROXY_API_KEY, LLM_PROXY_MODEL, LLM_PROXY_TIMEOUT_MS),
-    });
+      const outcome = await runOneBatch({
+        batch,
+        glossary,
+        contextTail: job.contextTail,
+        maxRetries: MAX_RETRIES,
+        callLlm: (prompt) => callLlm(prompt, LLM_PROXY_BASE_URL, this.env.LLM_PROXY_API_KEY, LLM_PROXY_MODEL, LLM_PROXY_TIMEOUT_MS),
+      });
 
-    job.translated.push(...outcome.translated);
-    if (outcome.warning) job.warnings.push(outcome.warning);
-    job.pendingRaw.push(...outcome.pendingRaw);
-    job.contextTail = outcome.newContextTail;
-    job.nextBatchIndex += 1;
+      job.translated.push(...outcome.translated);
+      if (outcome.warning) job.warnings.push(outcome.warning);
+      job.pendingRaw.push(...outcome.pendingRaw);
+      job.contextTail = outcome.newContextTail;
+      job.nextBatchIndex += 1;
 
-    if (job.nextBatchIndex < batches.length) {
+      if (job.nextBatchIndex < batches.length) {
+        await this.putJob(job);
+        await this.state.storage.setAlarm(Date.now());
+        return;
+      }
+
+      job.finalResult = await finishTranslation({
+        videoTitle: job.videoTitle,
+        zhCues: job.zhCues,
+        translated: job.translated,
+        warnings: job.warnings,
+        pendingRaw: job.pendingRaw,
+        glossary,
+        insertPendingTerm: (p) => this.drustClient().insertPendingTerm(p),
+      });
+      job.status = "done";
       await this.putJob(job);
-      await this.state.storage.setAlarm(Date.now());
-      return;
+      await this.state.storage.setAlarm(Date.now() + CLEANUP_DELAY_MS);
+    } catch (e) {
+      console.error("jobDurableObject alarm error:", e);
+      job.status = "error";
+      job.errorMessage = `處理過程發生未預期錯誤：${e instanceof Error ? e.message : String(e)}`;
+      await this.putJob(job);
+      await this.state.storage.setAlarm(Date.now() + CLEANUP_DELAY_MS);
     }
-
-    job.finalResult = await finishTranslation({
-      videoTitle: job.videoTitle,
-      zhCues: job.zhCues,
-      translated: job.translated,
-      warnings: job.warnings,
-      pendingRaw: job.pendingRaw,
-      glossary: job.glossary,
-      insertPendingTerm: (p) => this.drustClient().insertPendingTerm(p),
-    });
-    job.status = "done";
-    await this.putJob(job);
-    await this.state.storage.setAlarm(Date.now() + CLEANUP_DELAY_MS);
   }
 }

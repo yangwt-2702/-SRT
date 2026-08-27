@@ -35,12 +35,17 @@ document.getElementById("translateBtn").addEventListener("click", async () => {
   statusEl.textContent = "翻譯中，請稍候（可能需要數分鐘）...";
 
   const poll = async () => {
-    let data;
+    let resp, data;
     try {
-      const resp = await fetch(`/api/jobs/${jobId}`);
+      resp = await fetch(`/api/jobs/${jobId}`);
       data = await resp.json();
     } catch (err) {
       statusEl.textContent = "發生錯誤：" + err;
+      return;
+    }
+
+    if (!resp.ok) {
+      statusEl.textContent = "錯誤：" + (data.error || `伺服器錯誤，狀態碼 ${resp.status}`);
       return;
     }
 

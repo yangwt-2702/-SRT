@@ -47,6 +47,10 @@ export async function callLlm(
     throw new LlmApiError(`LLM 代理錯誤（status ${response.status}）：${await response.text()}`);
   }
 
-  const data = (await response.json()) as { choices: Array<{ message: { content: string } }> };
-  return data.choices[0].message.content;
+  const data = (await response.json()) as { choices?: Array<{ message?: { content?: unknown } }> };
+  const content = data.choices?.[0]?.message?.content;
+  if (typeof content !== "string") {
+    throw new LlmApiError(`LLM 代理回應格式異常，缺少預期的內容欄位：${JSON.stringify(data)}`);
+  }
+  return content;
 }

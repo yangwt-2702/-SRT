@@ -2,6 +2,7 @@ import { GlossaryRow } from "./promptBuilder";
 
 const MAX_ATTEMPTS = 3;
 const RETRY_BACKOFF_MS = 1000;
+const REQUEST_TIMEOUT_MS = 30_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -27,17 +28,22 @@ export class DrustClient {
   private async postWithRetry(url: string, jsonBody: unknown, headers: Record<string, string>): Promise<Response> {
     let lastError: unknown;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
       try {
         return await fetch(url, {
           method: "POST",
           headers: { ...headers, "Content-Type": "application/json" },
           body: JSON.stringify(jsonBody),
+          signal: controller.signal,
         });
       } catch (e) {
         lastError = e;
         if (attempt < MAX_ATTEMPTS - 1) {
           await sleep(RETRY_BACKOFF_MS);
         }
+      } finally {
+        clearTimeout(timer);
       }
     }
     throw lastError;
