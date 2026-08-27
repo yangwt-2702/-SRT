@@ -2,20 +2,39 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <title>慈濟字幕中翻英工具</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>編纂處字幕翻譯</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>中文字幕 → 英文字幕</h1>
-  <p>上傳已完成糾錯/格式化的中文 .srt，系統會依詞彙庫產出英文 .srt。</p>
+  <div class="page">
+    <header class="masthead">
+      <span class="seal" aria-hidden="true">譯</span>
+      <div class="masthead-text">
+        <h1>編纂處字幕翻譯</h1>
+        <p class="tagline">中文 SRT 翻譯英文 SRT</p>
+      </div>
+    </header>
 
-  <input type="file" id="fileInput" accept=".srt">
-  <button id="translateBtn">開始翻譯</button>
+    <p class="intro">上傳已完成糾錯／格式化的中文 <code>.srt</code>，系統會依詞彙庫產出英文 <code>.srt</code>。</p>
 
-  <div id="status"></div>
-  <div id="warnings"></div>
-  <div id="pendingTerms"></div>
-  <a id="downloadLink" style="display:none" download>下載英文字幕</a>
+    <section class="tool-card">
+      <div class="file-row">
+        <input type="file" id="fileInput" accept=".srt">
+        <button id="translateBtn">開始翻譯</button>
+      </div>
+
+      <p id="status" role="status"></p>
+      <pre id="warnings"></pre>
+      <pre id="pendingTerms"></pre>
+      <a id="downloadLink" download>下載英文字幕</a>
+    </section>
+
+    <footer class="foot-note">慈濟基金會編纂處</footer>
+  </div>
 
   <script src="app.js"></script>
 </body>

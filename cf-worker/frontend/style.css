@@ -1,4 +1,211 @@
-body { font-family: sans-serif; max-width: 640px; margin: 2rem auto; }
-#status { margin-top: 1rem; font-weight: bold; }
-#warnings, #pendingTerms { margin-top: 1rem; white-space: pre-wrap; color: #a33; }
-#downloadLink { display: block; margin-top: 1rem; }
+:root {
+  --paper: #f2ece0;
+  --paper-card: #faf6ee;
+  --ink: #2b2620;
+  --ink-soft: #6e6355;
+  --rule: #ddd2bd;
+  --tan: #b08e62;
+  --tan-deep: #8f6f47;
+  --seal: #9c3b2e;
+  --seal-ink: #ffffff;
+  --focus: #6e6355;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #201a14;
+    --paper-card: #2a2318;
+    --ink: #ece4d6;
+    --ink-soft: #b7ab97;
+    --rule: #473c2c;
+    --tan: #c8a877;
+    --tan-deep: #d9bb8b;
+    --seal: #d1594a;
+    --seal-ink: #201a14;
+    --focus: #c8a877;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  background-image: radial-gradient(circle at 1px 1px, rgba(110, 99, 85, 0.06) 1px, transparent 0);
+  background-size: 18px 18px;
+  color: var(--ink);
+  font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  line-height: 1.7;
+}
+
+.page {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  margin-bottom: 0.75rem;
+}
+
+.seal {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 3.1rem;
+  height: 3.1rem;
+  border-radius: 50%;
+  background: var(--seal);
+  color: var(--seal-ink);
+  font-family: "Noto Serif TC", serif;
+  font-weight: 700;
+  font-size: 1.3rem;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--seal-ink) 35%, transparent);
+}
+
+.masthead-text h1 {
+  font-family: "Noto Serif TC", serif;
+  font-weight: 700;
+  font-size: 1.7rem;
+  letter-spacing: 0.02em;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.tagline {
+  margin: 0.15rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.intro {
+  color: var(--ink-soft);
+  margin: 0 0 2rem;
+  max-width: 34em;
+}
+
+.intro code {
+  background: var(--paper-card);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.05em 0.4em;
+  font-size: 0.92em;
+}
+
+.tool-card {
+  background: var(--paper-card);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 1.75rem;
+}
+
+.file-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  align-items: center;
+}
+
+input[type="file"] {
+  flex: 1 1 220px;
+  min-width: 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+input[type="file"]::file-selector-button {
+  appearance: none;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  margin-right: 0.75rem;
+  cursor: pointer;
+}
+
+button {
+  appearance: none;
+  border: none;
+  background: var(--tan-deep);
+  color: var(--paper-card);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.65rem 1.4rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--tan);
+}
+
+button:focus-visible,
+input[type="file"]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+#status {
+  margin: 1.4rem 0 0;
+  font-weight: 600;
+  min-height: 1.4em;
+}
+
+#warnings,
+#pendingTerms {
+  margin: 1rem 0 0;
+  white-space: pre-wrap;
+  font-family: "Noto Sans TC", sans-serif;
+  font-size: 0.85rem;
+  border-left: 3px solid var(--seal);
+  background: color-mix(in srgb, var(--seal) 8%, var(--paper-card));
+  color: var(--ink);
+  border-radius: 0 6px 6px 0;
+  padding: 0.75rem 0.9rem;
+}
+
+#warnings:empty,
+#pendingTerms:empty {
+  display: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+#downloadLink {
+  display: none;
+  margin-top: 1.25rem;
+  color: var(--tan-deep);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+}
+
+#downloadLink:hover {
+  color: var(--tan);
+}
+
+.foot-note {
+  margin-top: 2.5rem;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
