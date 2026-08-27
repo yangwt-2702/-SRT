@@ -1,0 +1,4 @@
+body { font-family: sans-serif; max-width: 640px; margin: 2rem auto; }
+#status { margin-top: 1rem; font-weight: bold; }
+#warnings, #pendingTerms { margin-top: 1rem; white-space: pre-wrap; color: #a33; }
+#downloadLink { display: block; margin-top: 1rem; }
