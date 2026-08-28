@@ -21,7 +21,8 @@ describe("buildBatchPrompt", () => {
   it("flattens multiline cue text and prefixes every cue line", () => {
     const batch = [cue(1, "00:00:00,000", "00:00:01,000", "上人開示\n慈悲喜捨")];
     const prompt = buildBatchPrompt(batch, GLOSSARY, []);
-    const marker = "請翻譯以下字幕，輸出格式為每行「序號|||英文譯文」，不要加任何其他文字或說明：";
+    const marker =
+      "請翻譯以下字幕，輸出格式為每行「序號|||原文（逐字照抄，不可更動、不可省略）|||英文譯文」，不要加任何其他文字或說明。中間的原文欄位必須和輸入的該行文字一模一樣，用來核對翻譯是否對應到正確的行：";
     const cueSection = prompt.split(marker)[1];
     expect(cueSection).toContain("慈悲喜捨");
     for (const rawLine of cueSection.split("\n")) {

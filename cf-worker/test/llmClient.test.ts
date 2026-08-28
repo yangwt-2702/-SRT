@@ -50,6 +50,30 @@ describe("callLlm", () => {
     );
   });
 
+  it("extracts the retry-after delay from a rate-limit error body", async () => {
+    const resetAt = new Date(Date.now() + 10_000).toISOString().slice(0, 19).replace("T", " ");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ error: { message: `Rate limit exceeded. Limit resets at: ${resetAt} UTC` } }),
+          { status: 429 }
+        )
+      )
+    );
+
+    let caught: unknown;
+    try {
+      await callLlm("prompt text", BASE_URL, "sk-test", "Qwen3.6-35B-A3B", 60000);
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(LlmApiError);
+    expect((caught as LlmApiError).retryAfterMs).toBeGreaterThan(0);
+    expect((caught as LlmApiError).retryAfterMs).toBeLessThanOrEqual(10_000);
+  });
+
   it("raises on a connection error", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("network error")));
     await expect(callLlm("prompt text", BASE_URL, "sk-test", "Qwen3.6-35B-A3B", 60000)).rejects.toThrow(

@@ -1,6 +1,21 @@
-export class LlmApiError extends Error {}
+export class LlmApiError extends Error {
+  retryAfterMs?: number;
+
+  constructor(message: string, retryAfterMs?: number) {
+    super(message);
+    this.retryAfterMs = retryAfterMs;
+  }
+}
 
 const MAX_RESPONSE_TOKENS = 8192;
+
+function parseRetryAfterMs(bodyText: string): number | undefined {
+  const match = bodyText.match(/resets at:\s*([\d-]+\s[\d:]+)\s*UTC/i);
+  if (!match) return undefined;
+  const resetMs = new Date(`${match[1].replace(" ", "T")}Z`).getTime();
+  if (Number.isNaN(resetMs)) return undefined;
+  return Math.max(0, resetMs - Date.now());
+}
 
 export async function callLlm(
   prompt: string,
@@ -41,7 +56,8 @@ export async function callLlm(
     throw new LlmApiError(`LLM 代理 API 金鑰無效或無權限，請確認設定：${await response.text()}`);
   }
   if (response.status === 429) {
-    throw new LlmApiError(`LLM 代理已達速率限制，請稍後再試：${await response.text()}`);
+    const bodyText = await response.text();
+    throw new LlmApiError(`LLM 代理已達速率限制，請稍後再試：${bodyText}`, parseRetryAfterMs(bodyText));
   }
   if (response.status >= 400) {
     throw new LlmApiError(`LLM 代理錯誤（status ${response.status}）：${await response.text()}`);

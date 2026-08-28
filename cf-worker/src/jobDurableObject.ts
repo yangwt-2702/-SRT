@@ -1,11 +1,18 @@
 import { Cue, splitBatches } from "./srt";
 import { runOneBatch, finishTranslation, FinalResult } from "./orchestrator";
 import { callLlm } from "./llmClient";
+import { callGemini } from "./geminiClient";
 import { DrustClient } from "./drustClient";
 import { GlossaryRow } from "./promptBuilder";
 
 export interface Env {
   LLM_PROXY_API_KEY: string;
+  // Optional: fallback translator used only once the primary LLM proxy is
+  // exhausted for a batch, so a translation still comes out instead of the
+  // batch giving up to a placeholder. Until this secret is configured,
+  // callGemini fails fast on its own "not configured" error and the job
+  // behaves exactly as it did before the fallback existed.
+  GEMINI_API_KEY: string;
   DRUST_ANON_TOKEN: string;
   DRUST_SERVICE_TOKEN: string;
   JOB: DurableObjectNamespace;
@@ -14,6 +21,8 @@ export interface Env {
 const LLM_PROXY_BASE_URL = "https://sberecognition.tzuchi-org.tw/functions/v1/llm-proxy/v1";
 const LLM_PROXY_MODEL = "Qwen3.6-35B-A3B";
 const LLM_PROXY_TIMEOUT_MS = 180_000;
+const GEMINI_MODEL = "gemini-3.6-flash";
+const GEMINI_TIMEOUT_MS = 60_000;
 const DRUST_BASE = "https://tcdrust.tzuchi-org.tw";
 const DRUST_TENANT_ID = "9eec6c81-f435-4811-b86d-a4829edbecea";
 const BATCH_SIZE = 50;
@@ -129,6 +138,7 @@ export class JobDurableObject implements DurableObject {
         contextTail: job.contextTail,
         maxRetries: MAX_RETRIES,
         callLlm: (prompt) => callLlm(prompt, LLM_PROXY_BASE_URL, this.env.LLM_PROXY_API_KEY, LLM_PROXY_MODEL, LLM_PROXY_TIMEOUT_MS),
+        callFallbackLlm: (prompt) => callGemini(prompt, this.env.GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TIMEOUT_MS),
       });
 
       job.translated.push(...outcome.translated);
